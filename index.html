@@ -3,157 +3,664 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ESP32 Dashboard</title>
-
+<title>ESP32 Smart Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
-
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
-body {
-    margin: 0;
-    font-family: Arial;
-    background: linear-gradient(135deg,#1e3c72,#2a5298);
-    color: white;
-}
-
-/* GRID */
-.container {
+  :root {
+    --bg: #0a0f1e;
+    --panel: #111827;
+    --panel-border: #1f2f4a;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --green: #22c55e;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --glow: rgba(56,189,248,0.15);
+  }
+ 
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+ 
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+ 
+  /* Noise overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.6;
+  }
+ 
+  /* Ambient glow blobs */
+  .blob {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .blob-1 { width: 500px; height: 500px; background: rgba(56,189,248,0.06); top: -150px; left: -100px; }
+  .blob-2 { width: 400px; height: 400px; background: rgba(129,140,248,0.06); bottom: -100px; right: -80px; }
+ 
+  /* HEADER */
+  header {
+    position: relative;
+    z-index: 1;
+    padding: 36px 40px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--panel-border);
+  }
+ 
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+ 
+  .logo-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+ 
+  .logo-chip::before {
+    content: '';
+    width: 8px; height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse-dot 2s infinite;
+  }
+ 
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+ 
+  header h1 {
+    font-size: clamp(18px, 2.5vw, 26px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #fff;
+  }
+ 
+  header h1 span { color: var(--accent); }
+ 
+  .mqtt-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    border: 1px solid;
+    transition: all 0.4s;
+  }
+  .mqtt-badge.connecting { border-color: var(--muted); color: var(--muted); }
+  .mqtt-badge.connected  { border-color: var(--green); color: var(--green); box-shadow: 0 0 12px rgba(34,197,94,0.2); }
+  .mqtt-badge.error      { border-color: var(--red); color: var(--red); }
+ 
+  .mqtt-badge .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+  }
+  .mqtt-badge.connected .dot { animation: pulse-dot 1.5s infinite; }
+ 
+  /* GRID */
+  main {
+    position: relative;
+    z-index: 1;
+    padding: 32px 40px 40px;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px,1fr));
+    grid-template-columns: 300px 1fr 1fr;
+    grid-template-rows: auto auto;
     gap: 20px;
-    padding: 20px;
-}
-
-/* CARD */
-.card {
-    background: rgba(255,255,255,0.1);
-    padding: 20px;
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
+  }
+ 
+  /* CARD BASE */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 18px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+    animation: fadeUp 0.5s ease both;
+  }
+ 
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 60%);
+    pointer-events: none;
+  }
+ 
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+ 
+  .card:nth-child(1) { animation-delay: 0.05s; }
+  .card:nth-child(2) { animation-delay: 0.10s; }
+  .card:nth-child(3) { animation-delay: 0.15s; }
+  .card:nth-child(4) { animation-delay: 0.20s; }
+  .card:nth-child(5) { animation-delay: 0.25s; }
+ 
+  .card-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--panel-border);
+  }
+ 
+  /* LED CARD */
+  .led-card {
+    grid-row: span 2;
+    display: flex;
+    flex-direction: column;
+  }
+ 
+  .led-bulb {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 20px 0;
+    position: relative;
+  }
+ 
+  .bulb-icon {
+    font-size: 80px;
+    line-height: 1;
+    filter: grayscale(1) brightness(0.5);
+    transition: all 0.5s ease;
+    position: relative;
+    z-index: 1;
+  }
+ 
+  .bulb-glow {
+    position: absolute;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,220,50,0.4), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    filter: blur(20px);
+  }
+ 
+  .led-card.on .bulb-icon { filter: grayscale(0) brightness(1.1) drop-shadow(0 0 20px rgba(255,220,50,0.8)); }
+  .led-card.on .bulb-glow { opacity: 1; }
+ 
+  .led-status-text {
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
     text-align: center;
-}
-
-/* BUTTON */
-button {
-    padding: 12px 25px;
-    margin: 10px;
+    margin-bottom: 28px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--panel-border);
+    color: var(--muted);
+    transition: all 0.4s;
+  }
+ 
+  .led-card.on .led-status-text {
+    color: #fbbf24;
+    border-color: rgba(251,191,36,0.3);
+    background: rgba(251,191,36,0.08);
+    box-shadow: 0 0 12px rgba(251,191,36,0.1);
+  }
+ 
+  .led-card.off-state .led-status-text {
+    color: var(--muted);
+  }
+ 
+  .btn-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+ 
+  .btn {
+    padding: 14px;
     border: none;
-    border-radius: 10px;
-    font-size: 18px;
+    border-radius: 12px;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
     cursor: pointer;
-}
-
-.on { background: #00c853; }
-.off { background: #d50000; }
-
-#ledStatus {
-    font-size: 20px;
-    margin-top: 10px;
-}
-
-/* MAP */
-iframe {
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+ 
+  .btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.12);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+ 
+  .btn:hover::after { opacity: 1; }
+  .btn:active { transform: scale(0.97); }
+ 
+  .btn-on {
+    background: linear-gradient(135deg, #16a34a, #22c55e);
+    color: white;
+    box-shadow: 0 4px 15px rgba(34,197,94,0.3);
+  }
+ 
+  .btn-off {
+    background: linear-gradient(135deg, #b91c1c, #ef4444);
+    color: white;
+    box-shadow: 0 4px 15px rgba(239,68,68,0.3);
+  }
+ 
+  /* TIME CARD */
+  .time-card .time-display {
+    font-family: 'Space Mono', monospace;
+    font-size: clamp(32px, 4vw, 48px);
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+ 
+  .time-card .time-display span {
+    color: var(--accent);
+  }
+ 
+  .time-card .date-display {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+ 
+  .time-divider {
+    height: 1px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    margin: 16px 0;
+    width: 60%;
+  }
+ 
+  /* WEATHER CARD */
+  .weather-card .temp {
+    font-size: clamp(36px, 5vw, 56px);
+    font-weight: 800;
+    color: #fff;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+ 
+  .weather-card .temp span {
+    font-size: 0.45em;
+    vertical-align: super;
+    color: var(--accent);
+    font-weight: 400;
+  }
+ 
+  .weather-card .condition {
+    font-size: 14px;
+    color: var(--muted);
+    margin-top: 8px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+ 
+  .weather-bar {
+    margin-top: 20px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--panel-border);
+    overflow: hidden;
+  }
+ 
+  .weather-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #f59e0b);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 1s ease;
+  }
+ 
+  /* MAP CARD */
+  .map-card {
+    grid-column: span 2;
+  }
+ 
+  .map-card iframe {
     width: 100%;
-    height: 200px;
+    height: 220px;
+    border-radius: 12px;
+    border: 1px solid var(--panel-border);
+    filter: saturate(0.8) contrast(1.05);
+  }
+ 
+  .map-coords {
+    margin-top: 12px;
+    display: flex;
+    gap: 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+ 
+  .map-coords span {
+    background: rgba(255,255,255,0.04);
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--panel-border);
+  }
+ 
+  /* STATS ROW */
+  .stat-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+  }
+ 
+  .stat-pill {
+    flex: 1;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--panel-border);
     border-radius: 10px;
-}
+    padding: 12px 14px;
+  }
+ 
+  .stat-pill .label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+ 
+  .stat-pill .value {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+  }
+ 
+  /* Responsive */
+  @media (max-width: 900px) {
+    main {
+      grid-template-columns: 1fr 1fr;
+      padding: 20px;
+    }
+    .led-card { grid-row: span 1; }
+    .map-card { grid-column: span 2; }
+    header { padding: 24px 20px 18px; }
+  }
+ 
+  @media (max-width: 600px) {
+    main {
+      grid-template-columns: 1fr;
+      padding: 16px;
+    }
+    .map-card { grid-column: span 1; }
+  }
 </style>
 </head>
-
 <body>
-
-<h2 style="text-align:center">ESP32 SMART DASHBOARD</h2>
-
-<div class="container">
-
-<!-- LED -->
-<div class="card">
-    <h3>💡 LED</h3>
-    <button class="on" onclick="sendMQTT('ON')">BẬT</button>
-    <button class="off" onclick="sendMQTT('OFF')">TẮT</button>
-    <div id="ledStatus">---</div>
-</div>
-
-<!-- TIME -->
-<div class="card">
-    <h3>🕒 Thời gian</h3>
-    <div id="time"></div>
-    <div id="date"></div>
-</div>
-
-<!-- WEATHER -->
-<div class="card">
-    <h3>🌤 Thời tiết</h3>
-    <div id="weather">Loading...</div>
-</div>
-
-<!-- MAP -->
-<div class="card">
-    <h3>🗺 Vị trí</h3>
-    <iframe src="https://maps.google.com/maps?q=10.851013944312026,106.7719978093065&z=15&output=embed"></iframe>
-</div>
-
-</div>
-
+ 
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+ 
+<header>
+  <div class="header-left">
+    <div class="logo-chip">ESP32-C3</div>
+    <h1>Smart <span>Dashboard</span></h1>
+  </div>
+  <div class="mqtt-badge connecting" id="mqttBadge">
+    <div class="dot"></div>
+    <span id="mqttLabel">Đang kết nối...</span>
+  </div>
+</header>
+ 
+<main>
+ 
+  <!-- LED CARD -->
+  <div class="card led-card" id="ledCard">
+    <div class="card-label">💡 Điều khiển LED</div>
+ 
+    <div class="led-bulb">
+      <div class="bulb-glow"></div>
+      <div class="bulb-icon">💡</div>
+    </div>
+ 
+    <div class="led-status-text" id="ledStatus">Chưa có dữ liệu</div>
+ 
+    <div class="btn-group">
+      <button class="btn btn-on" onclick="sendMQTT('ON')">BẬT</button>
+      <button class="btn btn-off" onclick="sendMQTT('OFF')">TẮT</button>
+    </div>
+  </div>
+ 
+  <!-- TIME CARD -->
+  <div class="card time-card">
+    <div class="card-label">🕒 Thời gian thực</div>
+    <div class="time-display" id="time">--<span>:</span>--<span>:</span>--</div>
+    <div class="time-divider"></div>
+    <div class="date-display" id="date">-- / -- / ----</div>
+ 
+    <div class="stat-row" style="margin-top: 20px;">
+      <div class="stat-pill">
+        <div class="label">Múi giờ</div>
+        <div class="value">GMT+7</div>
+      </div>
+      <div class="stat-pill">
+        <div class="label">Vùng</div>
+        <div class="value">Ho Chi Minh</div>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- WEATHER CARD -->
+  <div class="card weather-card">
+    <div class="card-label">🌤 Thời tiết</div>
+    <div class="temp" id="weatherTemp">--<span>°C</span></div>
+    <div class="condition" id="weatherCond">Đang tải...</div>
+ 
+    <div class="weather-bar" style="margin-top: 20px;">
+      <div class="weather-bar-fill" id="tempBar"></div>
+    </div>
+ 
+    <div class="stat-row">
+      <div class="stat-pill">
+        <div class="label">Độ ẩm</div>
+        <div class="value" id="weatherHumid">--%</div>
+      </div>
+      <div class="stat-pill">
+        <div class="label">Cảm giác</div>
+        <div class="value" id="weatherFeels">--°C</div>
+      </div>
+      <div class="stat-pill">
+        <div class="label">Gió</div>
+        <div class="value" id="weatherWind">-- km/h</div>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- MAP CARD -->
+  <div class="card map-card">
+    <div class="card-label">🗺 Vị trí thiết bị</div>
+    <iframe
+      src="https://maps.google.com/maps?q=10.851013944312026,106.7719978093065&z=15&output=embed"
+      allowfullscreen loading="lazy">
+    </iframe>
+    <div class="map-coords">
+      <span>LAT: 10.8510°</span>
+      <span>LON: 106.7720°</span>
+      <span>TP. Hồ Chí Minh, VN</span>
+    </div>
+  </div>
+ 
+</main>
+ 
 <script>
-/* MQTT */
-var client = new Paho.MQTT.Client(
-    "815ea3e97ad64fa2b2ed517135326496.s1.eu.hivemq.cloud",
-    8884,
-    "web-" + Math.random()
-);
-
-client.onMessageArrived = function(msg) {
-    let state = msg.payloadString;
-
-    // HIỂN THỊ ĐÚNG (KHÔNG ĐẢO)
-    if(state === "ON"){
-        document.getElementById("ledStatus").innerText = "💡 ĐANG BẬT";
-    } else {
-        document.getElementById("ledStatus").innerText = "🌑 ĐANG TẮT";
-    }
-};
-
-client.connect({
-    useSSL: true,
-    userName: "ESP32C3_control",
-    password: "ESP32C3_control",
-    onSuccess: () => {
-        client.subscribe("hau_esp32c3/led/status");
-    }
-});
-
-function sendMQTT(cmd){
-    let m = new Paho.MQTT.Message(cmd);
-    m.destinationName = "hau_esp32c3/led/control";
-    client.send(m);
+/* ======================== MQTT ======================== */
+const MQTT_HOST   = "815ea3e97ad64fa2b2ed517135326496.s1.eu.hivemq.cloud";
+const MQTT_PORT   = 8884;
+const MQTT_USER   = "ESP32C3_control";
+const MQTT_PASS   = "ESP32C3_control";
+const TOPIC_SUB   = "hau_esp32c3/led/status";
+const TOPIC_PUB   = "hau_esp32c3/led/control";
+ 
+const badge  = document.getElementById("mqttBadge");
+const label  = document.getElementById("mqttLabel");
+const ledCard= document.getElementById("ledCard");
+const ledSt  = document.getElementById("ledStatus");
+ 
+function setMqttBadge(state, text) {
+  badge.className = "mqtt-badge " + state;
+  label.textContent = text;
 }
-
-/* TIME */
-setInterval(()=>{
-    let now = new Date();
-    document.getElementById("time").innerText =
-        now.toLocaleTimeString("vi-VN",{timeZone:"Asia/Ho_Chi_Minh"});
-    document.getElementById("date").innerText =
-        now.toLocaleDateString("vi-VN");
-},1000);
-
-/* WEATHER (5s) */
-const apiKey = "8f793fc0f4924a4ead491332261105";
-const lat = 10.851013944312026;
-const lon = 106.7719978093065;
-
-function getWeather(){
-    fetch(`https://api.weatherapi.com/v1/current.json?key=${apiKey}&q=${lat},${lon}&lang=vi`)
-    .then(r=>r.json())
-    .then(d=>{
-        document.getElementById("weather").innerHTML =
-            `${d.current.temp_c}°C - ${d.current.condition.text}`;
+ 
+let client;
+ 
+function mqttConnect() {
+  setMqttBadge("connecting", "Đang kết nối...");
+ 
+  client = new Paho.MQTT.Client(MQTT_HOST, MQTT_PORT, "web-" + Math.random().toString(36).slice(2));
+ 
+  client.onConnectionLost = function(res) {
+    setMqttBadge("error", "Mất kết nối");
+    console.warn("MQTT lost:", res.errorMessage);
+    // Thử kết nối lại sau 5s
+    setTimeout(mqttConnect, 5000);
+  };
+ 
+  client.onMessageArrived = function(msg) {
+    const state = msg.payloadString.trim().toUpperCase();
+    if (state === "ON") {
+      ledCard.className = "card led-card on";
+      ledSt.textContent  = "💡 Đang bật";
+    } else {
+      ledCard.className = "card led-card off-state";
+      ledSt.textContent  = "🌑 Đang tắt";
+    }
+  };
+ 
+  client.connect({
+    useSSL: true,
+    userName: MQTT_USER,
+    password: MQTT_PASS,
+    keepAliveInterval: 30,
+    onSuccess: function() {
+      setMqttBadge("connected", "MQTT: Đã kết nối");
+      client.subscribe(TOPIC_SUB);
+    },
+    onFailure: function(err) {
+      setMqttBadge("error", "Lỗi: " + (err.errorMessage || "Không kết nối được"));
+      console.error("MQTT fail:", err);
+      setTimeout(mqttConnect, 5000);
+    }
+  });
+}
+ 
+function sendMQTT(cmd) {
+  if (!client || !client.isConnected()) {
+    setMqttBadge("error", "Chưa kết nối!");
+    return;
+  }
+  const msg = new Paho.MQTT.Message(cmd);
+  msg.destinationName = TOPIC_PUB;
+  client.send(msg);
+}
+ 
+mqttConnect();
+ 
+/* ======================== TIME ======================== */
+function updateTime() {
+  const now  = new Date();
+  const t    = now.toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour12: false });
+  const d    = now.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const [h, m, s] = t.split(":");
+  document.getElementById("time").innerHTML = `${h}<span style="color:var(--accent);animation:blink 1s infinite">:</span>${m}<span style="color:var(--accent);animation:blink 1s infinite">:</span>${s}`;
+  document.getElementById("date").textContent = d;
+}
+updateTime();
+setInterval(updateTime, 1000);
+ 
+// Blinking colon style
+const blinkStyle = document.createElement("style");
+blinkStyle.textContent = `@keyframes blink { 0%,100%{opacity:1}50%{opacity:0.3} }`;
+document.head.appendChild(blinkStyle);
+ 
+/* ======================== WEATHER ======================== */
+const API_KEY = "8f793fc0f4924a4ead491332261105";
+const LAT     = 10.851013944312026;
+const LON     = 106.7719978093065;
+ 
+function getWeather() {
+  fetch(`https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${LAT},${LON}&lang=vi`)
+    .then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    })
+    .then(d => {
+      const c = d.current;
+      document.getElementById("weatherTemp").innerHTML = `${c.temp_c}<span>°C</span>`;
+      document.getElementById("weatherCond").textContent = c.condition.text;
+      document.getElementById("weatherHumid").textContent = c.humidity + "%";
+      document.getElementById("weatherFeels").textContent = c.feelslike_c + "°C";
+      document.getElementById("weatherWind").textContent  = c.wind_kph + " km/h";
+ 
+      // Thanh nhiệt độ: scale 0–45°C
+      const pct = Math.min(100, Math.max(0, (c.temp_c / 45) * 100));
+      setTimeout(() => {
+        document.getElementById("tempBar").style.width = pct + "%";
+      }, 300);
+    })
+    .catch(err => {
+      document.getElementById("weatherCond").textContent = "Không tải được dữ liệu";
+      console.error("Weather error:", err);
     });
 }
-
+ 
 getWeather();
-setInterval(getWeather, 5000);
+setInterval(getWeather, 5 * 60 * 1000); // cập nhật mỗi 5 phút thay vì 5 giây
 </script>
-
 </body>
 </html>
+ 
