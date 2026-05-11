@@ -2,68 +2,74 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Điều khiển ESP32-C3</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #f4f4f4; }
-        .btn { padding: 15px 40px; font-size: 20px; margin: 10px; cursor: pointer; border: none; border-radius: 5px; color: white; }
-        .btn-on { background-color: #4CAF50; }
-        .btn-off { background-color: #f44336; }
-        #status { margin-top: 20px; font-weight: bold; color: #555; }
-    </style>
 </head>
-<body>
 
-    <h2>Bảng Điều Khiển ESP32-C3</h2>
-    
-    <button class="btn btn-on" onclick="sendMQTT('ON')">BẬT ĐÈN</button>
-    <button class="btn btn-off" onclick="sendMQTT('OFF')">TẮT ĐÈN</button>
+<body style="text-align:center; font-family:Arial; margin-top:50px;">
 
-    <div id="status">Trạng thái MQTT: Đang kết nối...</div>
+<h2>ESP32-C3 MQTT Control</h2>
 
-    <script>
-        // 1. Sửa lại cấu hình Broker dựa trên ảnh của bạn
-        var broker = "815ea3e97ad64fa2b2ed517135326496.s1.eu.hivemq.cloud"; 
-        var port = 8884; // Phải dùng WebSocket Port bảo mật
-        var topic = "hau_esp32c3/led/control"; 
-        var clientId = "WebClient-" + Math.random().toString(16).substr(2, 8);
+<button onclick="sendMQTT('ON')" style="padding:15px 30px;">BẬT</button>
+<button onclick="sendMQTT('OFF')" style="padding:15px 30px;">TẮT</button>
 
-        var client = new Paho.MQTT.Client(broker, port, clientId);
+<p id="status">Đang kết nối...</p>
 
-        client.onConnectionLost = function(responseObject) {
-            document.getElementById("status").innerText = "Trạng thái MQTT: Mất kết nối!";
-            document.getElementById("status").style.color = "red";
-        };
+<script>
+var broker = "815ea3e97ad64fa2b2ed517135326496.s1.eu.hivemq.cloud";
+var port = 8884;
+var topic = "hau_esp32c3/led/control";
 
-        // 2. Thêm Username, Password và bật tính năng Bảo mật (SSL)
-        var options = {
-            timeout: 3,
-            useSSL: true, // BẮT BUỘC BẬT VỚI HIVEMQ CLOUD
-            userName: "ESP32C3_control", // Sửa lại thành Username của bạn
-            password: "ESP32C3_control", // Sửa lại thành Password của bạn
-            onSuccess: function() {
-                document.getElementById("status").innerText = "Trạng thái MQTT: Đã kết nối thành công!";
-                document.getElementById("status").style.color = "green";
-            },
-            onFailure: function(message) {
-                document.getElementById("status").innerText = "Trạng thái MQTT: Kết nối thất bại!";
-                document.getElementById("status").style.color = "red";
-            }
-        };
+// 🔥 clientID KHÔNG TRÙNG ESP
+var clientId = "WEB_" + Math.random().toString(16).substr(2, 8);
 
-        client.connect(options);
+var client = new Paho.MQTT.Client(broker, port, clientId);
 
-        function sendMQTT(command) {
-            if (client.isConnected()) {
-                var message = new Paho.MQTT.Message(command);
-                message.destinationName = topic;
-                client.send(message);
-                console.log("Đã gửi: " + command);
-            } else {
-                alert("Chưa kết nối được tới MQTT Broker!");
-            }
+// ===== CALLBACK =====
+client.onConnectionLost = function () {
+    document.getElementById("status").innerText = "Mất kết nối! Đang reconnect...";
+    setTimeout(connectMQTT, 3000); // auto reconnect
+};
+
+// ===== CONNECT =====
+function connectMQTT() {
+    client.connect({
+        useSSL: true,
+        userName: "ESP32C3_control",
+        password: "ESP32C3_control",
+
+        timeout: 10,
+        keepAliveInterval: 60,
+        cleanSession: true,
+
+        onSuccess: function () {
+            document.getElementById("status").innerText = "Đã kết nối MQTT";
+        },
+
+        onFailure: function () {
+            document.getElementById("status").innerText = "Kết nối lỗi, thử lại...";
+            setTimeout(connectMQTT, 3000);
         }
-    </script>
+    });
+}
+
+// ===== SEND =====
+function sendMQTT(cmd) {
+    if (!client.isConnected()) {
+        alert("Chưa kết nối MQTT!");
+        return;
+    }
+
+    var msg = new Paho.MQTT.Message(cmd);
+    msg.destinationName = topic;
+    client.send(msg);
+
+    console.log("Send:", cmd);
+}
+
+// start
+connectMQTT();
+</script>
+
 </body>
 </html>
