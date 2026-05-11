@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Điều khiển ESP32-C3</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #f4f4f4; }
+        .btn { padding: 15px 40px; font-size: 20px; margin: 10px; cursor: pointer; border: none; border-radius: 5px; color: white; }
+        .btn-on { background-color: #4CAF50; }
+        .btn-off { background-color: #f44336; }
+        #status { margin-top: 20px; font-weight: bold; color: #555; }
+    </style>
+</head>
+<body>
+
+    <h2>Bảng Điều Khiển ESP32-C3</h2>
+    
+    <button class="btn btn-on" onclick="sendMQTT('ON')">BẬT ĐÈN</button>
+    <button class="btn btn-off" onclick="sendMQTT('OFF')">TẮT ĐÈN</button>
+
+    <div id="status">Trạng thái MQTT: Đang kết nối...</div>
+
+    <script>
+        // Cấu hình Broker WebSockets
+        var broker = "broker.hivemq.com";
+        var port = 8000; // Port WebSockets của HiveMQ, KHÔNG phải 1883
+        var topic = "hau_esp32c3/led/control"; // Phải trùng khớp 100% với code ESP32
+        var clientId = "WebClient-" + Math.random().toString(16).substr(2, 8);
+
+        // Khởi tạo client
+        var client = new Paho.MQTT.Client(broker, port, clientId);
+
+        // Các hàm callback
+        client.onConnectionLost = function(responseObject) {
+            document.getElementById("status").innerText = "Trạng thái MQTT: Mất kết nối!";
+            document.getElementById("status").style.color = "red";
+        };
+
+        // Hàm kết nối
+        var options = {
+            timeout: 3,
+            onSuccess: function() {
+                document.getElementById("status").innerText = "Trạng thái MQTT: Đã kết nối thành công!";
+                document.getElementById("status").style.color = "green";
+            },
+            onFailure: function(message) {
+                document.getElementById("status").innerText = "Trạng thái MQTT: Kết nối thất bại!";
+                document.getElementById("status").style.color = "red";
+            }
+        };
+
+        // Bắt đầu kết nối
+        client.connect(options);
+
+        // Hàm gửi tín hiệu
+        function sendMQTT(command) {
+            if (client.isConnected()) {
+                var message = new Paho.MQTT.Message(command);
+                message.destinationName = topic;
+                client.send(message);
+                console.log("Đã gửi: " + command);
+            } else {
+                alert("Chưa kết nối được tới MQTT Broker!");
+            }
+        }
+    </script>
+</body>
+</html>
