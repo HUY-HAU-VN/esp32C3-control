@@ -23,24 +23,25 @@
     <div id="status">Trạng thái MQTT: Đang kết nối...</div>
 
     <script>
-        // Cấu hình Broker WebSockets
-        var broker = "broker.hivemq.com";
-        var port = 8000; // Port WebSockets của HiveMQ, KHÔNG phải 1883
-        var topic = "hau_esp32c3/led/control"; // Phải trùng khớp 100% với code ESP32
+        // 1. Sửa lại cấu hình Broker dựa trên ảnh của bạn
+        var broker = "815ea3e97ad64fa2b2ed517135326496.s1.eu.hivemq.cloud"; 
+        var port = 8884; // Phải dùng WebSocket Port bảo mật
+        var topic = "hau_esp32c3/led/control"; 
         var clientId = "WebClient-" + Math.random().toString(16).substr(2, 8);
 
-        // Khởi tạo client
         var client = new Paho.MQTT.Client(broker, port, clientId);
 
-        // Các hàm callback
         client.onConnectionLost = function(responseObject) {
             document.getElementById("status").innerText = "Trạng thái MQTT: Mất kết nối!";
             document.getElementById("status").style.color = "red";
         };
 
-        // Hàm kết nối
+        // 2. Thêm Username, Password và bật tính năng Bảo mật (SSL)
         var options = {
             timeout: 3,
+            useSSL: true, // BẮT BUỘC BẬT VỚI HIVEMQ CLOUD
+            userName: "NHẬP_USERNAME_VỪA_TẠO", // Sửa lại thành Username của bạn
+            password: "NHẬP_PASSWORD_VỪA_TẠO", // Sửa lại thành Password của bạn
             onSuccess: function() {
                 document.getElementById("status").innerText = "Trạng thái MQTT: Đã kết nối thành công!";
                 document.getElementById("status").style.color = "green";
@@ -51,10 +52,8 @@
             }
         };
 
-        // Bắt đầu kết nối
         client.connect(options);
 
-        // Hàm gửi tín hiệu
         function sendMQTT(command) {
             if (client.isConnected()) {
                 var message = new Paho.MQTT.Message(command);
