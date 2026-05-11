@@ -3,158 +3,156 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ESP32-C3 Smart Control</title>
+<title>ESP32 Dashboard</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 
 <style>
-    body {
-        font-family: Arial;
-        text-align: center;
-        background: linear-gradient(135deg, #1e3c72, #2a5298);
-        color: white;
-    }
+body {
+    margin: 0;
+    font-family: Arial;
+    background: linear-gradient(135deg,#1e3c72,#2a5298);
+    color: white;
+}
 
-    .container {
-        margin-top: 30px;
-    }
+/* GRID */
+.container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px,1fr));
+    gap: 20px;
+    padding: 20px;
+}
 
-    .card {
-        background: rgba(255,255,255,0.1);
-        padding: 20px;
-        margin: 15px auto;
-        border-radius: 15px;
-        width: 320px;
-        backdrop-filter: blur(10px);
-        box-shadow: 0 0 15px rgba(0,0,0,0.3);
-    }
+/* CARD */
+.card {
+    background: rgba(255,255,255,0.1);
+    padding: 20px;
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    text-align: center;
+}
 
-    button {
-        padding: 15px 30px;
-        margin: 10px;
-        font-size: 18px;
-        border: none;
-        border-radius: 10px;
-        cursor: pointer;
-    }
+/* BUTTON */
+button {
+    padding: 12px 25px;
+    margin: 10px;
+    border: none;
+    border-radius: 10px;
+    font-size: 18px;
+    cursor: pointer;
+}
 
-    .on { background: #00c853; color: white; }
-    .off { background: #d50000; color: white; }
+.on { background: #00c853; }
+.off { background: #d50000; }
 
-    #status { margin-top: 10px; }
+#ledStatus {
+    font-size: 20px;
+    margin-top: 10px;
+}
+
+/* MAP */
+iframe {
+    width: 100%;
+    height: 200px;
+    border-radius: 10px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>ESP32-C3 SMART CONTROL</h2>
+<h2 style="text-align:center">ESP32 SMART DASHBOARD</h2>
 
 <div class="container">
 
-    <!-- LED -->
-    <div class="card">
-        <h3>Điều khiển LED</h3>
-        <button class="on" onclick="sendMQTT('ON')">BẬT</button>
-        <button class="off" onclick="sendMQTT('OFF')">TẮT</button>
-        <p id="ledStatus">Trạng thái: ---</p>
-    </div>
+<!-- LED -->
+<div class="card">
+    <h3>💡 LED</h3>
+    <button class="on" onclick="sendMQTT('ON')">BẬT</button>
+    <button class="off" onclick="sendMQTT('OFF')">TẮT</button>
+    <div id="ledStatus">---</div>
+</div>
 
-    <!-- TIME -->
-    <div class="card">
-        <h3>Thời gian (Hà Nội)</h3>
-        <p id="time"></p>
-        <p id="date"></p>
-    </div>
+<!-- TIME -->
+<div class="card">
+    <h3>🕒 Thời gian</h3>
+    <div id="time"></div>
+    <div id="date"></div>
+</div>
 
-    <!-- WEATHER -->
-    <div class="card">
-        <h3>Thời tiết</h3>
-        <p id="temp"></p>
-        <p id="weather"></p>
-    </div>
+<!-- WEATHER -->
+<div class="card">
+    <h3>🌤 Thời tiết</h3>
+    <div id="weather">Loading...</div>
+</div>
 
-    <!-- MAP -->
-    <div class="card">
-        <h3>Vị trí</h3>
-        <iframe
-            width="100%"
-            height="200"
-            style="border-radius:10px;"
-            src="https://maps.google.com/maps?q=10.851013944312026,106.7719978093065&z=15&output=embed">
-        </iframe>
-    </div>
-
-    <div id="status">MQTT: Đang kết nối...</div>
+<!-- MAP -->
+<div class="card">
+    <h3>🗺 Vị trí</h3>
+    <iframe src="https://maps.google.com/maps?q=10.851013944312026,106.7719978093065&z=15&output=embed"></iframe>
+</div>
 
 </div>
 
 <script>
-/* ================= MQTT ================= */
-var broker = "815ea3e97ad64fa2b2ed517135326496.s1.eu.hivemq.cloud";
-var port = 8884;
-var topic = "hau_esp32c3/led/control";
+/* MQTT */
+var client = new Paho.MQTT.Client(
+    "815ea3e97ad64fa2b2ed517135326496.s1.eu.hivemq.cloud",
+    8884,
+    "web-" + Math.random()
+);
 
-var client = new Paho.MQTT.Client(broker, port, "web_" + Math.random());
+client.onMessageArrived = function(msg) {
+    let state = msg.payloadString;
 
-client.onConnectionLost = () => {
-    document.getElementById("status").innerText = "MQTT: Mất kết nối";
+    // HIỂN THỊ ĐÚNG (KHÔNG ĐẢO)
+    if(state === "ON"){
+        document.getElementById("ledStatus").innerText = "💡 ĐANG BẬT";
+    } else {
+        document.getElementById("ledStatus").innerText = "🌑 ĐANG TẮT";
+    }
 };
 
 client.connect({
     useSSL: true,
     userName: "ESP32C3_control",
     password: "ESP32C3_control",
-
     onSuccess: () => {
-        document.getElementById("status").innerText = "MQTT: Đã kết nối";
-        client.subscribe(topic);
+        client.subscribe("hau_esp32c3/led/status");
     }
 });
-
-/* nhận phản hồi */
-client.onMessageArrived = (message) => {
-    let msg = message.payloadString;
-
-    // ĐẢO HIỂN THỊ (do code ESP bạn bị đảo)
-    if(msg === "ON"){
-        document.getElementById("ledStatus").innerText = "Trạng thái: ĐANG TẮT";
-    } else {
-        document.getElementById("ledStatus").innerText = "Trạng thái: ĐANG BẬT";
-    }
-};
 
 function sendMQTT(cmd){
-    let message = new Paho.MQTT.Message(cmd);
-    message.destinationName = topic;
-    client.send(message);
+    let m = new Paho.MQTT.Message(cmd);
+    m.destinationName = "hau_esp32c3/led/control";
+    client.send(m);
 }
 
-/* ================= TIME ================= */
-function updateTime(){
+/* TIME */
+setInterval(()=>{
     let now = new Date();
+    document.getElementById("time").innerText =
+        now.toLocaleTimeString("vi-VN",{timeZone:"Asia/Ho_Chi_Minh"});
+    document.getElementById("date").innerText =
+        now.toLocaleDateString("vi-VN");
+},1000);
 
-    let time = now.toLocaleTimeString("vi-VN", {timeZone: "Asia/Ho_Chi_Minh"});
-    let date = now.toLocaleDateString("vi-VN");
-
-    document.getElementById("time").innerText = time;
-    document.getElementById("date").innerText = date;
-}
-setInterval(updateTime,1000);
-
-/* ================= WEATHER ================= */
+/* WEATHER (5s) */
 const apiKey = "8f793fc0f4924a4ead491332261105";
-const lat = "10.851013944312026";
-const lon = "106.7719978093065";
+const lat = 10.851013944312026;
+const lon = 106.7719978093065;
 
-fetch(`https://api.weatherapi.com/v1/current.json?key=${apiKey}&q=${lat},${lon}`)
-.then(res => res.json())
-.then(data => {
-    document.getElementById("temp").innerText =
-        "Nhiệt độ: " + data.current.temp_c + "°C";
+function getWeather(){
+    fetch(`https://api.weatherapi.com/v1/current.json?key=${apiKey}&q=${lat},${lon}&lang=vi`)
+    .then(r=>r.json())
+    .then(d=>{
+        document.getElementById("weather").innerHTML =
+            `${d.current.temp_c}°C - ${d.current.condition.text}`;
+    });
+}
 
-    document.getElementById("weather").innerText =
-        data.current.condition.text;
-});
+getWeather();
+setInterval(getWeather, 5000);
 </script>
 
 </body>
